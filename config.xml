@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+    <modules>
+        <module category="Datenaustausch" context="14403_Home_Connect" id="14403" name="Home Connect (14403)" version="00.01">
+            <inputs>
+			    <input type="number" const_name="is_verified" init_value="0">Is verified</input>
+            </inputs>
+            <outputs>
+				<output type="string" const_name="verification_uri" init_value="">Verification URI</output>
+            </outputs>               
+			<remanent_variables>
+            </remanent_variables>
+            <imports>
+                <import>libs/html_server</import>
+            </imports>
+        </module>			
+    </modules>
+</config>
