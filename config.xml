@@ -7,6 +7,9 @@
             </inputs>
             <outputs>
 				<output type="string" const_name="verification_uri" init_value="">Verification URI</output>
+                <output type="number" const_name="online" init_value="0">Online</output>
+                <output type="number" const_name="running" init_value="0">Running</output>
+                <output type="number" const_name="finished" init_value="0">Finished</output>
             </outputs>               
 			<remanent_variables>
             </remanent_variables>
