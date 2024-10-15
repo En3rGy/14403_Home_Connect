@@ -3,6 +3,7 @@
     <modules>
         <module category="Datenaustausch" context="14403_Home_Connect" id="14403" name="Home Connect (14403)" version="00.01">
             <inputs>
+			    <input type="string" const_name="client_id" init_value="">Client ID</input>
 			    <input type="number" const_name="is_verified" init_value="0">Is verified</input>
             </inputs>
             <outputs>

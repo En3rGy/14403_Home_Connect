@@ -23,7 +23,6 @@ class HtmlServer:
         :rtype: None
         :return: No implemented
         """
-        self.logger.debug("IP = {}, Port = {}".format(ip, port))
         server_address = (ip, port)
 
         self.logger.debug("Stopping potential server instance (re-) starting it.")
@@ -34,6 +33,8 @@ class HtmlServer:
             self.server.allow_reuse_address = True
             self.server.server_bind()
             self.server.server_activate()
+            server_ip, server_port = self.server.server_address
+            self.logger.debug("IP = {}, Port = {}".format(server_ip, server_port))
         except Exception as e:
             self.logger.error(str(e))
             return

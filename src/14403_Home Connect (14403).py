@@ -27,7 +27,8 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
         hsl20_4.BaseModule.__init__(self, homeserver_context, "14403_Home_Connect")
         self.FRAMEWORK = self._get_framework()
         self.LOGGER = self._get_logger(hsl20_4.LOGGING_NONE,())
-        self.PIN_I_IS_VERIFIED=1
+        self.PIN_I_CLIENT_ID=1
+        self.PIN_I_IS_VERIFIED=2
         self.PIN_O_VERIFICATION_URI=1
         self.PIN_O_ONLINE=2
         self.PIN_O_RUNNING=3
@@ -37,7 +38,8 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
 #### Own written code can be placed after this commentblock . Do not change or delete commentblock! ####
 ###################################################################################################!!!##
 
-        self.logger = logging.getLogger("{}".format(random.randint(0, 9999999)))
+        logging.basicConfig(datefmt="%Y-%m-d %H:%M:%S")
+        self.logger = logging.getLogger("\t{}".format(random.randint(0, 9999999)))
         self.time_out = 5
         self.url = "https://api.home-connect.com"
         self.server = html_server.HtmlServer(self.logger)
@@ -124,6 +126,7 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
 
         :return: Nothing
         """
+        self.logger.debug("get_auth_data | Entering")
         if self.auth_data.access_token:
             self.logger.debug("get_auth_data | access_token existing. No need for action.")
             return
@@ -137,8 +140,9 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
         scope = "IdentifyAppliance Monitor"
 
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        body = {"client_id": self.auth_data.client_id, "scope": scope}
-        data_s = self.get_data(self.url + path, body, headers, "POST")
+        body = {"client_id": self._get_input_value(self.PIN_I_CLIENT_ID), "scope": scope}
+        data_s = self._get_data(self.url + path, body, headers, "POST")
+
         try:
             data = json.loads(data_s)
 
@@ -166,59 +170,66 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
         if refresh:
-            # self.logger.debug("_get_access_token | Creating refresh_token body")
+            self.logger.debug("_get_access_token | Creating refresh_token body")
             body = {"grant_type": "refresh_token",
                     "refresh_token": self.auth_data.refresh_token,
                     "client_secret": self.auth_data.client_id[1:] + "."}
         else:
-            # self.logger.debug("_get_access_token | Creating device_code body")
+            self.logger.debug("_get_access_token | Creating device_code body")
             body = {"grant_type": "device_code",
                     "device_code": self.auth_data.device_code,
-                    "client_id": self.auth_data.client_id,
+                    "client_id": self._get_input_value(self.PIN_I_CLIENT_ID),
                     "client_secret": self.auth_data.client_id[1:] + "."}
 
-        # self.logger.debug("_get_access_token | calling get_data from _get_access_token")
-        ret = self.get_data(self.url + path, body, headers, method="POST")
+        ret = self._get_data(self.url + path, body, headers, method="POST")
         # self.logger.debug("_get_access_token | Received '{}'  from _get_access_token".format(ret))
-        ret = json.loads(ret)
-
-        self.auth_data.access_token = ret["access_token"]
-        self.auth_data.expires_in = ret["expires_in"]
-        self.auth_data.refresh_token = ret["refresh_token"]
+        try:
+            ret = json.loads(ret)
+            self.auth_data.access_token = ret["access_token"]
+            self.auth_data.expires_in = ret["expires_in"]
+            self.auth_data.refresh_token = ret["refresh_token"]
+            self.logger.info("_get_access_token | Received new auth data, valid until {}; access_toke: {}".format(
+                self.auth_data.expires_in, self.auth_data.access_token))
+        except Exception as e:
+            self.logger.error("_get_access_token | Exception '{}' with msg '{}'".format(e, ret))
+            pass
 
     def get_appliances(self):
         """
 
         :return:
         """
+        self.logger.debug("get_appliances | Entering.")
         path = "/api/homeappliances"
         headers = {"Accept": "application/vnd.bsh.sdk.v1+json",
                    "Authorization": "Bearer {access_token}".format(access_token=self.auth_data.access_token)}
 
-        ret = self.get_data(url=self.url + path, headers=headers)
+        ret = self._get_data(url=self.url + path, headers=headers)
         ret = json.loads(str(ret))
 
         if "data" not in ret:
-            print("get_appliance | if 'data' not in ret: {}".format(ret))
+            self.logger.debug("get_appliance | if 'data' not in ret: {}".format(ret))
             return
 
         appliances = ret["data"]["homeappliances"]
 
-        html = '<html><title>Home Appliances</title><body><table>'
-        html += '<table border="1"><tr><th>Name</th><th>haId</th></tr>'
+        html = '<html>\n\t<title>Home Appliances</title>\n\t<body>\n'
+        html += '\t\t<table border="1">\n\t\t\t<tr><th>Name</th><th>haId</th></tr>\n'
 
         for appliance_device_json in appliances:
             appliance_device = self.ApplianceDevice(appliance_device_json)
-            self.appliances.append(appliance_device)  # @todo add only of not yet existing
-            html += '<tr><td>{}</td><td>{}</td></tr>'.format(appliance_device.name, appliance_device.ha_id)
-        html += '<table></body></html>'
+            if appliance_device not in self.appliances:
+                self.appliances.append(appliance_device)  # @todo add only of not yet existing
+                html += '\t\t\t<tr><td>{}</td><td>{}</td></tr>\n'.format(appliance_device.name, appliance_device.ha_id)
+
+        html += '\t\t<table>\n\t</body>\n</html>'
         self.server.set_html_content(html)
 
     def get_device_status(self, ha_id):
         path = "/api/homeappliances/{}/status".format(ha_id)
         headers = {"accept": "application/vnd.bsh.sdk.v1+json",
                    "Authorization": "Bearer {access_token}".format(access_token=self.auth_data.access_token)}
-        ret = self.get_data(url=self.url + path, headers=headers)
+        ret = self._get_data(url=self.url + path, headers=headers)
         self.process_device_status(ret)
 
     def process_device_status(self, msg):
@@ -310,7 +321,7 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
                             return []
 
                         self.logger.debug("run_event_thread | Received {} bytes via eventstream.".format(len(new_data)))
-                        self.process_event_msg(new_data)
+                        self._process_event_msg(new_data)
                         data += new_data
                         msgs = data.split("\n")  # is ending with seperator, an empty element will be attached
                         self.msg_last = msgs[-1]  # store last( incomplete or empty) msg for later usage
@@ -330,8 +341,8 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
 
         self.log_msg("run_event_thread | Exiting event loop!")
 
-    def process_event_msg(self, data):
-        self.logger.debug("process_event_msg | Entering")
+    def _process_event_msg(self, data):
+        self.logger.debug("_process_event_msg | Entering")
         data = data.replace("\r", "")
         msgs = data.split("\n")  # is ending with seperator, an empty element will be attached
         ha_data = {}
@@ -340,23 +351,24 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
             if len(key_val) is 2:
                 ha_data[str(key_val[0])] = str(key_val[1])
 
-        self.logger.debug("process_event_msg | ha_data: {}".format(ha_data))
+        self.logger.debug("_process_event_msg | ha_data: {}".format(ha_data))
         if "event" not in ha_data and "Connection" not in ha_data:
-            self.logger.warning("process_event_msg | Unknown message: {}".format(ha_data))
+            self.logger.warning("_process_event_msg | Unknown message: {}".format(ha_data))
             return
 
         if "event" in ha_data:
             if ha_data["event"] == "KEEP-ALIVE":
-                self.logger.debug("process_event_msg | Msg: KEEP-ALIVE")
+                self.logger.debug("_process_event_msg | Msg: KEEP-ALIVE")
             else:
                 if len(ha_data["data"]) > 0:
-                    self.logger.info("process_event_msg | {}".format(ha_data["data"]))
+                    self.logger.info("_process_event_msg | {}".format(ha_data["data"]))
                     self.process_device_status(ha_data["data"])
 
-    def get_data(self, url, body=None, headers=None, method="GET", loop_count=0):
+    def _get_data(self, url, body=None, headers=None, method="GET", loop_count=0):
         # Build a SSL Context to disable certificate verification.
+        self.logger.debug("_get_data | Entering")
         if loop_count > 1:
-            self.logger.error("get_data | loop count > 1 -> aborting.")
+            self.logger.error("_get_data | loop count > 1 -> aborting.")
             return "{}"
 
         ctx = ssl._create_unverified_context()
@@ -378,31 +390,38 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
             response_data = response.read()
 
         except urllib2.HTTPError as e:
-            error_s = e.read()
+            error_s = str(e.read())
             if error_s.find("error") > 0:
                 msg = json.loads(error_s)
-                error_msg = str(msg["error"]["description"])
-                self.logger.error("get_data | Home Connect error {} with msg: '{}'".format(e.code, error_msg))
+                if "description" in msg["error"]:
+                    error_msg = str(msg["error"]["description"])
+                elif "error_description" in msg:
+                    error_msg = str(msg["error_description"])
+                self.logger.error("_get_data | Home Connect error {} with msg: '{}'".format(e.code, error_msg))
+
             if int(e.code) == 409:
                 # device is offline
                 return error_s
+            elif int(e.code) == 400:
+                self.logger.debug("_get_data |\n\tHeader: {}\n\tBody:   {}".format(headers, body))
             elif int(e.code) == 401:
-                self.logger.debug("get_data | Received '{}' ins {}.-loop. "
+                self.logger.debug("_get_data | Received '{}' ins {}.-loop. "
                                   "Try to refresh access token".format(e, loop_count))
-                self.logger.debug("get_data | access_token was '{}'.".format(self.auth_data.access_token))
+                self.logger.debug("_get_data | access_token was '{}'.".format(self.auth_data.access_token))
                 self.auth_data.access_token = ""
                 self.get_auth_data()
                 if self.auth_data.access_token:
                     # retry with new access data
-                    self.logger.debug("get_data | Retry request with new access token: '{}'.".format(
+                    self.logger.debug("_get_data | Retry request with new access token: '{}'.".format(
                         self.auth_data.access_token))
-                    return self.get_data(url, body, headers, method, loop_count=loop_count + 1)
+                    return self._get_data(url, body, headers, method, loop_count=loop_count + 1)
                 else:
                     self.auth_data.refresh_token = ""
-                    self.logger.debug("get_data | Try to get new authentication data (user verification required!)")
+                    self.logger.debug("_get_data | Try to get new authentication data (user verification required!)")
                     self.get_auth_data()
                     return error_s
             else:
+                print(error_s)
                 return error_s
 
         return response_data
@@ -410,7 +429,7 @@ class HomeConnect_14403_14403(hsl20_4.BaseModule):
     def on_init(self):
         self.DEBUG = self.FRAMEWORK.create_debug_section()
         self.g_out_sbc = {}
-        self.server.run_server(self.FRAMEWORK.get_homeserver_private_ip(), self.server_port)
+        self.server.run_server(self.FRAMEWORK.get_homeserver_private_ip(), 0)
         self.get_appliances()
 
     def on_input_value(self, index, value):
